@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct Ram{
-    mem:[u8;4096],
+    pub mem:[u8;4096],
 
 }
 impl Ram{
@@ -35,14 +35,14 @@ impl Ram{
             }
         }
 
-        for i in 0..0x1ff{
-            print!("{:#X} ",ram.mem[i]);
-        }
+        // for i in 0..0x1ff{
+        //     print!("{:#X} ",ram.mem[i]);
+        // }
         ram 
     }
     pub fn write_byte(&mut self,address:u16,value:u8){
         // println!("Writing file.....");
-        println!("writing {} to {}",value,address);
+        //println!("writing {} to {}",value,address);
         self.mem[address as usize] = value;
     }
 

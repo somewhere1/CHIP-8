@@ -3,7 +3,7 @@ use std::io::Read;
 use chip8::Chip8;
 mod ram;
 mod chip8;
-
+mod cpu;
 fn main() {
     let mut file =  File::open("data/INVADERS").unwrap();
     let mut data = Vec::<u8>::new();
@@ -11,5 +11,9 @@ fn main() {
     let b = file.read_to_end(&mut data);
     let mut my_chip = Chip8::new();
     my_chip.load_from(&data);
-    println!("{:?}",my_chip.ram);
+    //println!("{:?}",my_chip.ram);
+
+    loop{
+        my_chip.run_instruction();
+    }
 }
