@@ -12,8 +12,10 @@ impl Chip8{
     }
     pub fn load_from(&mut self,data: &Vec<u8> ){
         let offset = 0x200;
+        println!("loading File.......");
         for i in 0..data.len(){
-            self.ram.write_byte((offset+1) as u16,data[i]);
+            self.ram.write_byte((offset+i) as u16,data[i]);
+
         }
 
     }
