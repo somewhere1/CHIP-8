@@ -1,9 +1,15 @@
 use std::fs::File;
 use std::io::Read;
 use chip8::Chip8;
+use bus::Bus;
+
 mod ram;
 mod chip8;
 mod cpu;
+mod bus;
+mod keyboard;
+mod display;
+
 fn main() {
     let mut file =  File::open("data/INVADERS").unwrap();
     let mut data = Vec::<u8>::new();

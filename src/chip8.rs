@@ -1,15 +1,15 @@
-use crate::ram::Ram;
+use crate::bus::Bus;
 use crate::cpu::Cpu;
 use crate::cpu;
 pub struct Chip8{
-    pub ram:Ram,
+    pub bus:Bus,
     pub cpu:Cpu,
 }
 
 impl Chip8{
     pub fn new() -> Self{
         Chip8{
-            ram:Ram::new(),
+            bus:Bus::new(),
             cpu:Cpu::new()
         }
     }
@@ -17,13 +17,13 @@ impl Chip8{
         //let offset = 0x200;
         //println!("loading File.......");
         for i in 0..data.len(){
-            self.ram.write_byte(cpu::PROGRAM_START  + (i as u16),data[i]);
+            self.bus.ram_write_byte(cpu::PROGRAM_START  + (i as u16),data[i]);
 
         }
 
     }
     pub fn run_instruction(&mut self){
-        self.cpu.run_instruction(&mut self.ram);
+        self.cpu.run_instruction(&mut self.bus);
         println!("{:?}",self.cpu);
     }       
 }

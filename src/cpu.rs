@@ -1,4 +1,4 @@
-use crate::ram::Ram;
+use crate::bus::Bus;
 use std::fmt;
 pub const PROGRAM_START:u16 = 0x200;
 
@@ -7,6 +7,7 @@ pub struct Cpu{
     pc:u16,
     i:u16,
     prev_pc:u16,
+    ret_stack:Vec<u16>,
 
 }
 
@@ -17,21 +18,22 @@ impl Cpu{
             pc:PROGRAM_START,
             i:0,
             prev_pc:0,
+            ret_stack:Vec::<u16>::new(),
         }
     }
 
-    pub fn run_instruction(&mut self,ram:&mut Ram){
+    pub fn run_instruction(&mut self,bus:&mut Bus){
         //利用self.pc取指令
-        let high = ram.read_byte(self.pc) as u16;
-        let low = ram.read_byte(self.pc+1) as u16;
-        let instruction = (high << 8) | low ;
+        let high = bus.ram_read_byte(self.pc) as u16;
+        let low = bus.ram_read_byte(self.pc+1) as u16;
+        let instruction:u16  = (high << 8) | low ;
         println!("Instruction: read {:#X}:low {:#X} high {:#X}",instruction,low,high);
         
         let  nnn = instruction & 0xFFF;
         let  nn = (instruction & 0x0FF) as u8;
         let  n = (instruction & 0x00F) as u8;
-        let x = ((instruction & 0xF00) >> 8) as u8;
-        let y = ((instruction & 0x00F0) >> 4) as u8;
+        let  x = ((instruction & 0x0F00) >> 8) as u8;
+        let  y = ((instruction & 0x00F0) >> 4) as u8;
         println!("nnn={:?},nn={:?},n={:?},x={:?},y={:?}",nnn,nn,n,x,y);
         
         if self.prev_pc == self.pc{
@@ -39,9 +41,32 @@ impl Cpu{
         }
         self.prev_pc = self.pc;
         
-        match instruction & 0xF000 >> 12{
+        match (instruction & 0xF000) >> 12{
+            0x0 => {
+                match nn{
+                    0xE0 =>{
+                        bus.clear_screen();
+                        self.pc += 2;
+                    },
+                    0xEE =>{
+                        //return form subroutine
+                        let addr = self.ret_stack.pop().unwrap();
+                        self.pc = addr;
+                    },
+                     _ => panic!(
+                        "Unrecgonized 0x00** instruction: {:#X}:{:#X}",
+                        self.pc,
+                        instruction
+                     )
+                }
+            },
             //goto nnn
             0x1 =>{
+                self.pc = nnn;
+            },
+            0x2 =>{
+                // Call subroutine at address NNN
+                self.ret_stack.push(self.pc+2);
                 self.pc = nnn;
             },
             0x3 => {
@@ -62,7 +87,71 @@ impl Cpu{
             0x7 => {
                 let vx = self.read_reg_vx(x);
                 self.write_reg_vx(x,vx.wrapping_add(nn));
-                self.pc +2 ;
+                self.pc += 2 ;
+
+            },
+            0x8=> {
+                let Vx = self.read_reg_vx(x);
+                let Vy = self.read_reg_vx(y);
+                match n {
+                    
+                    0 => {
+                        //Vx=Vy
+                        self.write_reg_vx(x,Vy);
+                        self.pc += 2;
+                    },
+                    1 => {
+                        self.write_reg_vx(x,Vx|Vy);
+                        self.pc += 2;
+                    },
+                    2 => {
+                        //Vx = Vx&Vy
+                        let value = Vx & Vy;
+                        self.write_reg_vx(x,value);
+                        self.pc += 2;
+                    },
+                    3 => {
+                        //Vx = Vx^Vy
+                        let value = Vx^Vy;
+                        self.write_reg_vx(x,value);
+                        self.pc += 2;
+                    },
+                    4 =>{
+                        let sum: u16 = Vx as u16 + Vy as u16;
+                        self.write_reg_vx(x,sum as u8);
+                        if sum > 0xFF {
+                            self.write_reg_vx(0xF,1);
+                        }
+
+                        self.pc += 2;
+                    },
+                    5 =>
+                    {
+                      let diff = Vx as i8 - Vy as i8;
+                       self.write_reg_vx(x,diff as u8);
+                       if diff < 0{
+                        self.write_reg_vx(0xF,1);
+                       }
+                        self.pc += 2; 
+                    }
+                    6 =>{
+                        //Vx=Vy=Vy >> 1
+                        self.write_reg_vx(0xF, Vy & 0x1);
+                        self.write_reg_vx(x,Vy >> 1);
+                        self.write_reg_vx(y,Vy >> 1);
+                        self.pc += 2;
+                    },
+                    7 =>{
+                        self.write_reg_vx(x,Vy-Vx);
+                        self.pc += 2; 
+                    },
+                    0xE =>{
+                        self.write_reg_vx(x,Vy << 1);
+                        self.write_reg_vx(y,Vy << 1);
+                        self.pc += 2; 
+                    },
+                    _ => unreachable!(),
+                };
 
             },
             0xA => {
@@ -72,39 +161,66 @@ impl Cpu{
             },
             0xD => {
                 //draw(Vx,Vy,N)
-                self.debug_draw_sprite(ram,x,y,n);
+                self.debug_draw_sprite(bus,x,y,n);
                 self.pc += 2;
             },
+            0xE =>{
+                match nn {
+                    0xA1 => {
+                        // if (key() != Vx) then skip the next instruction
+                        let key = self.read_reg_vx(x);
+                        if bus.key_pressed(key){
+                            self.pc += 4;
+                        }
+                        else{
+                            self.pc += 2;
+                        }
+                    },
+                    0x9E => {
+                       // if (key() == Vx) then skip the next instruction
+                        let key = self.read_reg_vx(x);
+                        if bus.key_pressed(key){
+                            self.pc += 4;
+                        }
+                        else{
+                            self.pc += 2;
+                        }
+                    }
+
+                    _ => panic!("")
+                }
+            }
             0xF =>{
                 //I += Vx
                 let vx = self.read_reg_vx(x);
                 self.i += vx as u16;
-                self.pc + 2;
+                self.pc += 2;
 
             },
                 _ => panic!("Unrecognized instruction {:#X}: {:#X}",self.pc,instruction)
-            }
+            };
 
-        //self.pc += 2;
-        //解析指令： 操作码 -- 寄存器
+         print!("当前pc:{:#X}",self.pc);
         
     }
 
-    pub fn debug_draw_sprite(&self,ram:&mut Ram,x: u8, y:u8,height:u8){
+    pub fn debug_draw_sprite(&mut self,bus:&mut Bus,x: u8, y:u8,height:u8){
         println!("Drawing sprites at ({},{})",x,y);
-        for i in 0..height{
-            let mut b =  ram.read_byte(self.i + y as u16);
-            for _ in 0..8{
-                match (b & 0b1000_0000) >> 7{
-                    0 => print!(""),
-                    1 => print!("#"),
-                    _ => unreachable!()
-                }
-                b = b << 1;
+        let mut should_st_vf = false;
+
+        for y in 0..height{
+            let mut b =  bus.ram_read_byte(self.i + y as u16);
+            if bus.debug_draw_byte(b,x,y){
+                should_st_vf = true;
             }
-            print!("\n");
         }
-        print!("\n");
+        if should_st_vf{
+            self.write_reg_vx(0xF,0);
+        }
+        else{
+            self.write_reg_vx(0xF,0);
+        }
+        bus.present_screen();
     }
 
     pub fn write_reg_vx(&mut self,index:u8,value:u8){
