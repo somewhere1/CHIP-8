@@ -17,12 +17,13 @@ impl Chip8{
         //let offset = 0x200;
         //println!("loading File.......");
         for i in 0..data.len(){
-            self.ram.write_byte((cpu::PROGRAM_START  + (i as u16)),data[i]);
+            self.ram.write_byte(cpu::PROGRAM_START  + (i as u16),data[i]);
 
         }
 
     }
     pub fn run_instruction(&mut self){
         self.cpu.run_instruction(&mut self.ram);
-    }
+        println!("{:?}",self.cpu);
+    }       
 }
